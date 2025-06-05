@@ -13,20 +13,36 @@ class GerenciadorSistema:
         self.relatorios = RelatoriosExcel()
         self.cadastrar_todos_os_bibliotecarios()
 
+    # Dentro da classe GerenciadorSistema, no arquivo GerenciadorSistema.py
+
     def cadastrar_todos_os_bibliotecarios(self):
-        #cadastra todos os bibliotecarios recuperados do arquivo bibliotecarios.txt no sistema
         try:
-            #abre o arquivo txt
-            with open('bibliotecarios.txt') as bibliotecarios:
-                #pega as informações dos bibliotecários a partir de linhas
-                for bibliotecario in bibliotecarios:
-                    informacoes_bibliotecario = bibliotecario.split(',') #separada as informações recuperadas a partir de virgula e guarda em um array
-                    bibliotecario_recuperado = Bibliotecario(nome=informacoes_bibliotecario[0], id_bibliotecario=informacoes_bibliotecario[1]) #recupera um objeto bibliotecario a partir das informações recuperadas
-                    self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=bibliotecario_recuperado) #cadastra o bibliotecario no banco de dados
+            with open('bibliotecarios.txt', 'r', encoding='utf-8') as arquivo_bibliotecarios:
+                # NÃO HÁ 'next(arquivo_bibliotecarios)' AQUI, POIS SEU NOVO ARQUIVO NÃO TEM CABEÇALHO
+
+                for linha_do_arquivo in arquivo_bibliotecarios:
+                    linha_limpa = linha_do_arquivo.strip() # Limpa a linha inteira
+
+                    if not linha_limpa: # Pula linhas em branco
+                        continue
+                        
+                    informacoes_bibliotecario = linha_limpa.split(',')
+                    
+                    if len(informacoes_bibliotecario) == 2: 
+                        nome_bibliotecario = informacoes_bibliotecario[0].strip()
+                        # ESSENCIAL: Limpa o ID para remover espaços/quebras de linha
+                        id_do_bibliotecario = informacoes_bibliotecario[1].strip() 
+
+                        # print(f"DEBUG: Processando para cadastro - Nome='{nome_bibliotecario}', ID='{id_do_bibliotecario}'") # Descomente para depurar
+
+                        bibliotecario_recuperado = Bibliotecario(nome=nome_bibliotecario, id_bibliotecario=id_do_bibliotecario) 
+                        self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=bibliotecario_recuperado)
+                    else:
+                        print(f"AVISO: Linha ignorada em bibliotecarios.txt (formato inválido?): '{linha_limpa}'")
         except FileNotFoundError:
-            print("arquivo 'bibliotecarios.txt' não encontrado.")
+            print("ARQUIVO CRÍTICO 'bibliotecarios.txt' não encontrado.")
         except Exception as e:
-            print(f"erro ao cadastrar os funcionarios: {e}")
+            print(f"ERRO ao processar 'bibliotecarios.txt' ou cadastrar bibliotecários: {type(e).__name__} - {e}")
 
     def cadastrar_livro(self, titulo : str, autor : str, id_livro : str):
         livro = Livro(titulo=titulo, autor=autor, id_livro=id_livro)
