@@ -117,17 +117,26 @@ class TelaPrincipal(ctk.CTk):
         nome = self.entry_nome_cliente.get().strip()
         cpf = self.entry_cpf_cliente.get().strip()
         self.label_feedback_cliente.configure(text="")
-        if not nome or not cpf: self.label_feedback_cliente.configure(text="Nome e CPF são obrigatórios.", text_color="red"); return
-        if len(cpf) != 11 or not cpf.isdigit(): self.label_feedback_cliente.configure(text="CPF inválido (11 dígitos numéricos).", text_color="red"); return
-        if len(nome) > 60: self.label_feedback_cliente.configure(text="Nome excede 60 caracteres.", text_color="red"); return
+
+        if not nome or not cpf:
+            self.label_feedback_cliente.configure(text="Nome e CPF são obrigatórios.", text_color="red")
+            return
+        if len(cpf) != 11 or not cpf.isdigit():
+            self.label_feedback_cliente.configure(text="CPF inválido (11 dígitos numéricos).", text_color="red")
+            return
+        
         try:
             if self.gerenciador_sistema.gerenciador_banco_dados.recuperar_cliente(cpf=cpf):
                 self.label_feedback_cliente.configure(text=f"Cliente com CPF {cpf} já cadastrado.", text_color="orange")
             else:
                 self.gerenciador_sistema.cadastrar_cliente(nome=nome, cpf=cpf)
-                self.label_feedback_cliente.configure(text="Cliente cadastrado com sucesso!", text_color="green")
-                self.entry_nome_cliente.delete(0, 'end'); self.entry_cpf_cliente.delete(0, 'end')
-        except Exception as e: self.label_feedback_cliente.configure(text="Erro ao cadastrar. Verifique console.", text_color="red"); print(f"ERRO GUI (Cad Cliente): {e}")
+                # Alteração solicitada:
+                self.label_feedback_cliente.configure(text="Cadastro efetuado!", text_color="green") 
+                self.entry_nome_cliente.delete(0, 'end')
+                self.entry_cpf_cliente.delete(0, 'end')
+        except Exception as e:
+            self.label_feedback_cliente.configure(text="Erro ao cadastrar. Verifique o console.", text_color="red")
+            print(f"ERRO GUI (Cadastrar Cliente): {e}")
 
     # --- TELA CADASTRO DE LIVRO (MODIFICADA) ---
     def tela_cadastro_livro(self):
@@ -191,26 +200,22 @@ class TelaPrincipal(ctk.CTk):
     def acao_efetuar_cadastro_livro(self):
         titulo = self.entry_titulo_livro.get().strip()
         autor = self.entry_autor_livro.get().strip()
-        self.label_feedback_livro.configure(text="") # Limpa feedback
+        self.label_feedback_livro.configure(text="")
 
         if not titulo or not autor:
             self.label_feedback_livro.configure(text="Título e Autor são obrigatórios.", text_color="red")
             return
 
         # Geração de ID do Livro (Placeholder)
-        random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-        id_livro_gerado = f"LIV{random_suffix}"
-        print(f"DEBUG: ID de Livro gerado (placeholder): {id_livro_gerado}")
-
+        id_livro_gerado = f"LIV{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}"
+        
         try:
-            # Seu GerenciadorSistema.cadastrar_livro espera (titulo, autor, id_livro)
-            # A lógica de verificação se o livro já existe (pelo ID) está no seu GerenciadorBancoDados.cadastrar_livro
             self.gerenciador_sistema.cadastrar_livro(titulo=titulo, autor=autor, id_livro=id_livro_gerado)
             
-            # O feedback de sucesso/erro do backend é impresso no console.
-            # Para a GUI, podemos dar uma mensagem genérica ou adaptar o backend para retornar status.
-            self.label_feedback_livro.configure(text=f"Operação de cadastro para '{titulo}' enviada.\nID Gerado: {id_livro_gerado}.\n(Verifique o console para status detalhado)", 
-                                                text_color="blue", wraplength=350) # Aumentado wraplength
+            # Alteração solicitada:
+            self.label_feedback_livro.configure(text="Cadastro efetuado!", text_color="green")
+            print(f"DEBUG: Livro '{titulo}' salvo com ID '{id_livro_gerado}'.")
+            
             self.entry_titulo_livro.delete(0, 'end')
             self.entry_autor_livro.delete(0, 'end')
         except Exception as e:
@@ -387,7 +392,8 @@ class TelaPrincipal(ctk.CTk):
         
         self.label_feedback_emprestimo = ctk.CTkLabel(painel_formulario, text="", font=ctk.CTkFont(size=12))
         self.label_feedback_emprestimo.pack(pady=5)
-
+        
+        # Alteração no command do botão:
         btn_avancar = ctk.CTkButton(painel_formulario, text="Avançar", command=self.acao_registrar_emprestimo, width=200, height=35, fg_color=COR_LARANJA_CAMPOS_BOTOES, text_color=COR_TEXTO_BOTAO_LARANJA, corner_radius=10)
         btn_avancar.pack(pady=20)
         self._adicionar_botao_voltar(frame_tela_reg_emp)
@@ -396,21 +402,45 @@ class TelaPrincipal(ctk.CTk):
         cpf = self.entry_cpf_emprestimo.get().strip()
         id_livro = self.entry_idlivro_emprestimo.get().strip()
         self.label_feedback_emprestimo.configure(text="")
-        if not cpf or not id_livro: self.label_feedback_emprestimo.configure(text="CPF e ID do Livro são obrigatórios.", text_color="red"); return
-        # Adicione mais validações se necessário (formato CPF, formato ID Livro)
-        try:
-            # O método registrar_emprestimo_usuario em GerenciadorSistema já contém várias validações
-            # e imprime mensagens no console. Precisaríamos de um retorno para a GUI.
-            # Por enquanto, vamos apenas chamar e dar um feedback genérico.
-            # Você pode modificar GerenciadorSistema para retornar True/False/Mensagem.
-            self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro)
-            self.label_feedback_emprestimo.configure(text="Tentativa de registro de empréstimo enviada.\nVerifique o console para detalhes.", text_color="blue", wraplength=300)
-            # Limpar campos seria bom se a operação for bem-sucedida e o backend confirmar.
-            # self.entry_cpf_emprestimo.delete(0, 'end'); self.entry_idlivro_emprestimo.delete(0, 'end')
-        except Exception as e:
-            self.label_feedback_emprestimo.configure(text="Erro ao registrar empréstimo. Verifique console.", text_color="red")
-            print(f"ERRO GUI (Reg Empréstimo): {e}")
 
+        if not cpf or not id_livro:
+            self.label_feedback_emprestimo.configure(text="CPF e ID do Livro são obrigatórios.", text_color="red")
+            return
+
+        try:
+            # 1. Verificar se o cliente existe
+            cliente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_cliente(cpf=cpf)
+            if not cliente:
+                self.label_feedback_emprestimo.configure(text="Empréstimo negado! CPF não cadastrado.", text_color="red")
+                return
+
+            # 2. Verificar se o cliente já tem um empréstimo ativo
+            emprestimo_existente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_emprestimo(cpf=cpf)
+            if emprestimo_existente:
+                # Sua lógica de backend já verifica isso. Para ser mais claro,
+                # a mensagem "Multa pendente" é uma consequência, mas a causa é o empréstimo ativo.
+                # Vamos usar uma mensagem mais direta.
+                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Cliente já possui um livro.", text_color="orange")
+                return
+            
+            # 3. Verificar se o livro existe e está disponível
+            livro = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_livro_por_id(id_livro=id_livro)
+            if not livro:
+                 self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro com ID '{id_livro}' não encontrado.", text_color="red")
+                 return
+            if livro.get_status() == True: # True significa que está emprestado
+                 self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro '{livro.get_titulo()}' já está emprestado.", text_color="orange")
+                 return
+
+            # Se todas as verificações passaram, registrar o empréstimo
+            self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro)
+            self.label_feedback_emprestimo.configure(text="Empréstimo efetuado!", text_color="green")
+            self.entry_cpf_emprestimo.delete(0, 'end')
+            self.entry_idlivro_emprestimo.delete(0, 'end')
+
+        except Exception as e:
+            self.label_feedback_emprestimo.configure(text="Erro ao registrar empréstimo. Verifique o console.", text_color="red")
+            print(f"ERRO GUI (Reg Empréstimo): {e}")
 
     def tela_registro_devolucao(self):
         for widget in self.frame_conteudo.winfo_children(): widget.destroy()
@@ -556,7 +586,12 @@ if __name__ == '__main__':
         def consultar_clientes_por_livro_emprestado(self, id_livro): return [self.gerenciador_banco_dados.clientes_mock["11122233344"]] if id_livro == "LIV001" else []
         def consultar_clientes_com_multas(self): return [self.gerenciador_banco_dados.clientes_mock["11122233344"]] # Fulano tem multa no mock
         # --- Mocks para as novas telas de Registro ---
-        def registrar_emprestimo_usuario(self, cpf, id_livro): print(f"MOCK GS: Registrando empréstimo CPF:{cpf}, Livro ID:{id_livro}") # Simula sucesso
+        def registrar_emprestimo_usuario(self, cpf, id_livro):
+            livro = self.gerenciador_banco_dados.recuperar_livro_por_id(id_livro)
+            if livro:
+                livro._status = True  # Marcar como emprestado
+                print(f"Livro '{livro.get_titulo()}' marcado como emprestado.")
+
         def registrar_devolucao_emprestimo_usuario(self, cpf): print(f"MOCK GS: Registrando devolução para CPF:{cpf}") # Simula sucesso
         def registrar_pagamento_multa_usuario(self, cpf): print(f"MOCK GS: Registrando pagamento de multa para CPF:{cpf}") # Simula sucesso
 
