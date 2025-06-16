@@ -312,23 +312,45 @@ class TelaPrincipal(ctk.CTk):
         self.mostrar_area_busca_inicial_clientes(tipo_consulta_ativo=tipo_consulta, placeholder_text=placeholders.get(tipo_consulta, "Digite sua busca"))
         
     def executar_busca_clientes(self, tipo_busca, termo_busca):
-        for widget in self.frame_resultados_clientes.winfo_children(): widget.destroy()
-        if tipo_busca != "multa" and not termo_busca.strip(): ctk.CTkLabel(self.frame_resultados_clientes, text="Digite um termo para a busca.", text_color="orange").pack(pady=20); return
+        for widget in self.frame_resultados_clientes.winfo_children():
+            widget.destroy()
+
+        if tipo_busca != "multa" and not termo_busca.strip():
+            ctk.CTkLabel(self.frame_resultados_clientes, text="Digite um termo para a busca.", text_color="orange").pack(pady=20)
+            return
+            
         resultados = []
         try:
-            if tipo_busca == "cpf": cliente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_cliente(cpf=termo_busca); resultados = [cliente] if cliente else []
-            elif tipo_busca == "nome": resultados = self.gerenciador_sistema.consultar_clientes_por_nome(nome=termo_busca)
-            elif tipo_busca == "id_livro": resultados = self.gerenciador_sistema.consultar_clientes_por_livro_emprestado(id_livro=termo_busca)
-            elif tipo_busca == "multa": resultados = self.gerenciador_sistema.consultar_clientes_com_multas()
-        except AttributeError as ae: print(f"ERRO Atributo (Busca Clientes): {ae}"); ctk.CTkLabel(self.frame_resultados_clientes, text="Funcionalidade de busca não implementada.", text_color="red").pack(pady=10); return
-        except Exception as e: print(f"ERRO Busca Clientes: {e}"); ctk.CTkLabel(self.frame_resultados_clientes, text=f"Erro ao buscar: {e}", text_color="red").pack(pady=10); return
+            if tipo_busca == "cpf":
+                cliente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_cliente(cpf=termo_busca)
+                resultados = [cliente] if cliente else []
+            elif tipo_busca == "nome":
+                resultados = self.gerenciador_sistema.consultar_clientes_por_nome(nome=termo_busca)
+            elif tipo_busca == "id_livro":
+                resultados = self.gerenciador_sistema.consultar_clientes_por_livro_emprestado(id_livro=termo_busca)
+            elif tipo_busca == "multa":
+                resultados = self.gerenciador_sistema.consultar_clientes_com_multas()
+        except AttributeError as ae:
+            print(f"ERRO de Atributo (Busca Clientes): Método não implementado no backend: {ae}")
+            ctk.CTkLabel(self.frame_resultados_clientes, text="Funcionalidade de busca não implementada.", text_color="red").pack(pady=10)
+            return
+        except Exception as e:
+            print(f"ERRO Busca Clientes: {e}")
+            ctk.CTkLabel(self.frame_resultados_clientes, text=f"Erro ao buscar: {e}", text_color="red").pack(pady=10)
+            return
+            
         if resultados:
-            headers = ["CPF", "Nome", "Email"] # Adapte conforme os dados do seu Cliente
-            for col, header_text in enumerate(headers): ctk.CTkLabel(self.frame_resultados_clientes, text=header_text, font=ctk.CTkFont(weight="bold"), text_color=COR_TEXTO_LABEL_FORM).grid(row=0, column=col, padx=10, pady=5, sticky="w")
+            headers = ["CPF", "Nome", "Email"]
+            for col, header_text in enumerate(headers):
+                ctk.CTkLabel(self.frame_resultados_clientes, text=header_text, font=ctk.CTkFont(weight="bold"), text_color=COR_TEXTO_LABEL_FORM).grid(row=0, column=col, padx=10, pady=5, sticky="w")
+                
             for row_idx, cliente_obj in enumerate(resultados, start=1):
-                dados_cliente = [cliente_obj.get_cpf(), cliente_obj.get_nome(), cliente_obj.get_email() if hasattr(cliente_obj, 'get_email') else "N/A"]
-                for col_idx, dado in enumerate(dados_cliente): ctk.CTkLabel(self.frame_resultados_clientes, text=str(dado), text_color=COR_TEXTO_LABEL_FORM).grid(row=row_idx, column=col_idx, padx=10, pady=3, sticky="w")
-        else: ctk.CTkLabel(self.frame_resultados_clientes, text=f"Nenhum cliente encontrado.", text_color=COR_TEXTO_LABEL_FORM).pack(pady=20)
+                email_cliente = cliente_obj.get_email() if hasattr(cliente_obj, 'get_email') and cliente_obj.get_email() else "N/A"
+                dados_cliente = [cliente_obj.get_cpf(), cliente_obj.get_nome(), email_cliente]
+                for col_idx, dado in enumerate(dados_cliente):
+                    ctk.CTkLabel(self.frame_resultados_clientes, text=str(dado), text_color=COR_TEXTO_LABEL_FORM).grid(row=row_idx, column=col_idx, padx=10, pady=3, sticky="w")
+        else:
+            ctk.CTkLabel(self.frame_resultados_clientes, text="Nenhum cliente encontrado.", text_color=COR_TEXTO_LABEL_FORM).pack(pady=20)
 
     def tela_consulta_multas(self): # Já implementada na resposta anterior
         for widget in self.frame_conteudo.winfo_children(): widget.destroy()
@@ -377,6 +399,7 @@ class TelaPrincipal(ctk.CTk):
 
     # --- TELAS DE REGISTRO ---
     def tela_registro_emprestimos(self):
+        print(f"[DEBUG] registrar_emprestimo_usuario chamado para CPF {cpf} e livro {id_livro}")
         for widget in self.frame_conteudo.winfo_children(): widget.destroy()
         frame_tela_reg_emp = ctk.CTkFrame(self.frame_conteudo, fg_color="transparent")
         frame_tela_reg_emp.pack(fill="both", expand=True)
@@ -408,45 +431,39 @@ class TelaPrincipal(ctk.CTk):
             return
 
         try:
-            # 1. Verificar se o cliente existe
             cliente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_cliente(cpf=cpf)
             if not cliente:
                 self.label_feedback_emprestimo.configure(text="Empréstimo negado! CPF não cadastrado.", text_color="red")
                 return
 
-            # 2. Verificar se o cliente já tem um empréstimo ativo
             emprestimo_existente = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_emprestimo(cpf=cpf)
             if emprestimo_existente:
-                # Sua lógica de backend já verifica isso. Para ser mais claro,
-                # a mensagem "Multa pendente" é uma consequência, mas a causa é o empréstimo ativo.
-                # Vamos usar uma mensagem mais direta.
                 self.label_feedback_emprestimo.configure(text="Empréstimo negado! Cliente já possui um livro.", text_color="orange")
                 return
-            
-            # 3. Verificar se o livro existe e está disponível
+
             livro = self.gerenciador_sistema.gerenciador_banco_dados.recuperar_livro_por_id(id_livro=id_livro)
             if not livro:
-                 self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro com ID '{id_livro}' não encontrado.", text_color="red")
-                 return
-            if livro.get_status() == True: # True significa que está emprestado
-                 self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro '{livro.get_titulo()}' já está emprestado.", text_color="orange")
-                 return
+                self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro com ID '{id_livro}' não encontrado.", text_color="red")
+                return
+            if livro.get_status():
+                self.label_feedback_emprestimo.configure(text=f"Empréstimo negado! Livro '{livro.get_titulo()}' já está emprestado.", text_color="orange")
+                return
 
-            # Se todas as verificações passaram, registrar o empréstimo
-            if self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 4:
+            sucesso = self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro)
+
+            if sucesso:
                 self.label_feedback_emprestimo.configure(text="Empréstimo efetuado!", text_color="green")
                 self.entry_cpf_emprestimo.delete(0, 'end')
                 self.entry_idlivro_emprestimo.delete(0, 'end')
-            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 3:
-                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro indisponível.", text_color="orange")
-            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 2:
-                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro indisponível.", text_color="orange")            
-            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 1:
-                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro ou cliente não cadastrados.", text_color="red")
+            else:
+                self.label_feedback_emprestimo.configure(text="Erro ao registrar empréstimo. Verifique o console.", text_color="red")
+
+            print("DEBUG GUI: Tentando registrar empréstimo com CPF:", cpf, "e Livro:", id_livro)
 
         except Exception as e:
             self.label_feedback_emprestimo.configure(text="Erro ao registrar empréstimo. Verifique o console.", text_color="red")
             print(f"ERRO GUI (Reg Empréstimo): {e}")
+
 
     def tela_registro_devolucao(self):
         for widget in self.frame_conteudo.winfo_children(): widget.destroy()
@@ -473,19 +490,28 @@ class TelaPrincipal(ctk.CTk):
 
     def acao_registrar_devolucao(self):
         cpf = self.entry_cpf_devolucao.get().strip()
-        # id_livro_devolvido = self.entry_idlivro_devolucao.get().strip() # Lido mas não usado pelo backend atual
         self.label_feedback_devolucao.configure(text="")
-        if not cpf: self.label_feedback_devolucao.configure(text="CPF é obrigatório.", text_color="red"); return
+        if not cpf:
+            self.label_feedback_devolucao.configure(text="CPF é obrigatório.", text_color="red")
+            return
+        
         try:
-            # O método registrar_devolucao_emprestimo_usuario no backend usa apenas CPF
-            # e já imprime mensagens no console.
-            self.gerenciador_sistema.registrar_devolucao_emprestimo_usuario(cpf=cpf)
-            self.label_feedback_devolucao.configure(text="Tentativa de registro de devolução enviada.\nVerifique o console para detalhes.", text_color="blue", wraplength=300)
-            # self.entry_cpf_devolucao.delete(0, 'end'); self.entry_idlivro_devolucao.delete(0, 'end')
-        except Exception as e:
-            self.label_feedback_devolucao.configure(text="Erro ao registrar devolução. Verifique console.", text_color="red")
-            print(f"ERRO GUI (Reg Devolução): {e}")
+            # A lógica de validação agora está no backend
+            sucesso = self.gerenciador_sistema.registrar_devolucao_emprestimo_usuario(cpf=cpf)
+            
+            if sucesso:
+                self.label_feedback_devolucao.configure(text="Devolução efetuada!", text_color="green")
+                self.entry_cpf_devolucao.delete(0, 'end')
+                self.entry_idlivro_devolucao.delete(0, 'end')
+            else:
+                # O backend já imprime a razão do erro no console.
+                # A GUI pode dar uma mensagem mais genérica ou você pode refatorar o backend
+                # para retornar a mensagem de erro específica.
+                self.label_feedback_devolucao.configure(text="Devolução negada. Verifique o console.", text_color="red")
 
+        except Exception as e:
+            self.label_feedback_devolucao.configure(text="Erro ao processar devolução.", text_color="red")
+            print(f"ERRO GUI (Reg Devolução): {e}")
 
     def tela_registro_pagamento(self):
         for widget in self.frame_conteudo.winfo_children(): widget.destroy()

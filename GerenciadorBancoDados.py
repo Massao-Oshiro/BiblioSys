@@ -197,31 +197,50 @@ class GerenciadorBancoDados:
         except sqlite3.Error as e:
             print(f'erro ao cadastrar livro no banco de dados {e}')
     
-    def cadastrar_emprestimo(self, cpf_cliente : str, id_livro : str):
+    def cadastrar_emprestimo(self, cpf_cliente: str, id_livro: str):
         try:
-            emprestimo_recuperado = self.recuperar_emprestimo(cpf=cpf_cliente)
-            if emprestimo_recuperado:
-                print(f'emprestimo {emprestimo_recuperado.get_id_emprestimo()}')
-                return
-
-            emprestimo = Emprestimo(cpf_cliente=cpf_cliente, id_livro=id_livro)
-            data_emprestimo = emprestimo.get_prazo().strftime('%Y-%m-%d')
-            livro_recuperado = self.recuperar_livro_por_id(id_livro=id_livro)
-            livro_recuperado.set_status(status=True)
-
-            self.cursor.execute('''
-                INSERT INTO emprestimo (cpf_cliente, id_livro, prazo, multa)
-                VALUES (?, ?, ?, ?)
-            ''', (cpf_cliente, id_livro, data_emprestimo, emprestimo.get_multa()))
+            from Emprestimo import Emprestimo # Importação local para evitar importação circular
             
+            print(f"--- INÍCIO REGISTRO EMPRÉSTIMO (CPF: {cpf_cliente}, Livro: {id_livro}) ---")
+            
+            # Validações essenciais antes de registrar
+            emprestimo_existente = self.recuperar_emprestimo(cpf=cpf_cliente)
+            if emprestimo_existente:
+                print(f"ERRO: Cliente com CPF {cpf_cliente} já possui um empréstimo ativo.")
+                return False
+
+            livro_recuperado = self.recuperar_livro_por_id(id_livro=id_livro)
+            if not livro_recuperado:
+                print(f"ERRO: Livro com ID '{id_livro}' não existe no acervo.")
+                return False
+
+            print(f"DEBUG (BD): Status ATUAL do livro '{livro_recuperado.get_titulo()}': {livro_recuperado.get_status()}")
+            if livro_recuperado.get_status() == True: # True significa que está emprestado
+                print(f"ERRO: Livro '{livro_recuperado.get_titulo()}' já está emprestado e indisponível.")
+                return False
+
+            # Se todas as validações passaram, prossegue
+            data_emprestimo = datetime.now().date()
+            prazo = data_emprestimo + timedelta(days=15)
+
             self.cursor.execute('''
-                UPDATE livro SET status = ? WHERE id_livro = ?
-            ''', (1 if livro_recuperado.get_status() else 0, id_livro))
+                INSERT INTO emprestimo (cpf_cliente, id_livro, data_emprestimo, prazo, multa)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (cpf_cliente, id_livro, data_emprestimo.isoformat(), prazo.isoformat(), 0.0))
+
+            print(f"DEBUG (BD): Executando 'UPDATE livro SET status = 1 WHERE id_livro = {id_livro}'")
+            self.cursor.execute('''
+                UPDATE livro SET status = 1 WHERE id_livro = ?
+            ''', (id_livro,))
+
             self.conn.commit()
-            print("emprestimo cadastrado com sucesso")
+            print("DEBUG (BD): Commit realizado. Empréstimo cadastrado e status do livro atualizado.")
+            return True
+
         except sqlite3.Error as e:
-            print(f'erro ao cadastrar emprestimo {e}')
-    
+            print(f'ERRO GBD ao cadastrar emprestimo: {e}')
+            return False
+             
     def cadastrar_autor(self, nome : str):
         try:
             if self.recuperar_autor(nome=nome):
@@ -271,37 +290,34 @@ class GerenciadorBancoDados:
         except sqlite3.Error as e:
             print(f'erro ao cadastrar pessoa no banco de dados {e}')
 
-    def registrar_devolucao_emprestimo_usuario(self, cpf : str):
-        #registra a devolução do empréstimo de um livro a partir do cpf
-        try:            
-            emprestimo_recuperado = self.recuperar_emprestimo(cpf=cpf)
+    def registrar_devolucao_emprestimo_usuario(self, cpf: str):
+        try:
+            emprestimo = self.recuperar_emprestimo(cpf=cpf)
+            if not emprestimo:
+                print("Cliente não possui empréstimos ativos.")
+                return False
 
-            if not emprestimo_recuperado:
-                print("cliente nao possui nenhum livro alugado")
-                return
-        
-            if emprestimo_recuperado.get_prazo():
-                self.calcular_multa(cpf=cpf)
-                if emprestimo_recuperado.get_multa() > 0:
-                    print("usuario deve pagar multa antes de fazer a devolucao")
-                    return
+            self.calcular_multa(cpf=cpf)
+            emprestimo_atualizado = self.recuperar_emprestimo(cpf=cpf)
             
-            livro_recuperado = self.recuperar_livro_por_id(id_livro=emprestimo_recuperado.get_id_livro())
-            livro_recuperado.set_status(status=False)
-
-            self.cursor.execute('''
-                DELETE FROM emprestimo WHERE cpf_cliente = ?
-            ''', (cpf,))
-
-            self.cursor.execute('''
-                UPDATE livro SET status = ? WHERE id_livro = ?
-            ''', (1 if livro_recuperado.get_status() else 0, livro_recuperado.get_id_livro()))
+            if emprestimo_atualizado and emprestimo_atualizado.get_multa() > 0:
+                print(f"Devolução não permitida: multa de R$ {emprestimo_atualizado.get_multa():.2f} pendente.")
+                return False
+            
+            id_livro_devolvido = emprestimo.get_id_livro()
+            
+            # Deleta o registro de empréstimo
+            self.cursor.execute("DELETE FROM emprestimo WHERE cpf_cliente = ?", (cpf,))
+            
+            # ALTERAÇÃO: Atualiza o status do livro para 0 (Disponível)
+            self.cursor.execute("UPDATE livro SET status = 0 WHERE id_livro = ?", (id_livro_devolvido,))
+            
             self.conn.commit()
-            print("devolucao feita com sucesso")
-
+            print("Devolução feita com sucesso e status do livro atualizado para 'Disponível'.")
+            return True
         except sqlite3.Error as e:
-            print("erro ao registrar devolucao de emprestimo {e}")
-        
+            print(f"Erro ao registrar devolução: {e}")
+            return False
 
     def calcular_multa(self, cpf : str):
         #calcula o valor da multa de um usuário a partir do cpf de um usuário
@@ -500,6 +516,82 @@ class GerenciadorBancoDados:
         
         except sqlite3.Error as e:
             print(f'erro ao listar livros escritos por {autor} {e}')
+            return []
+        
+    
+    def atualizar_status_livro(self, id_livro: str, status: bool):
+        try:
+            self.cursor.execute(
+                "UPDATE livro SET status = ? WHERE id_livro = ?",
+                (1 if status else 0, id_livro)
+            )
+            self.conn.commit()
+            print(f"[BD] Status do livro '{id_livro}' atualizado para {'Emprestado' if status else 'Disponível'}.")
+        except Exception as e:
+            print(f"[ERRO BD] Falha ao atualizar status do livro: {e}")
+
+    def registrar_emprestimo_simples(self, cpf_cliente, id_livro, data_emprestimo, prazo):
+        try:
+            self.cursor.execute('''
+                INSERT INTO emprestimo (cpf_cliente, id_livro, data_emprestimo, prazo, multa)
+                VALUES (?, ?, ?, ?, 0.00)
+            ''', (cpf_cliente, id_livro, data_emprestimo, prazo))
+            self.cursor.execute('''
+                UPDATE livro SET status = 1 WHERE id_livro = ?
+            ''', (id_livro,))
+            self.conn.commit()
+            print("[BD] Empréstimo registrado e livro marcado como emprestado.")
+            return True
+        except sqlite3.Error as e:
+            print(f"[ERRO BD] Falha ao registrar empréstimo: {e}")
+            return False
+   
+    def consultar_clientes_por_nome(self, nome: str) -> List[Cliente]:
+        """ADICIONADO: Novo método para buscar clientes por parte do nome."""
+        try:
+            # O operador '%' é um coringa que permite buscar por partes do nome
+            termo_busca = '%' + nome.lower() + '%'
+            self.cursor.execute("SELECT cpf FROM cliente WHERE lower(nome) LIKE ?", (termo_busca,))
+            cpfs_tuplas = self.cursor.fetchall()
+            
+            if not cpfs_tuplas:
+                return []
+            
+            # Reutiliza o método recuperar_cliente para montar a lista de objetos
+            return [self.recuperar_cliente(cpf[0]) for cpf in cpfs_tuplas if self.recuperar_cliente(cpf[0])]
+            
+        except sqlite3.Error as e:
+            print(f"Erro ao consultar clientes por nome: {e}")
+            return []
+
+    def consultar_clientes_por_livro_emprestado(self, id_livro: str) -> List[Cliente]:
+        """ADICIONADO: Novo método para buscar cliente por livro emprestado."""
+        try:
+            self.cursor.execute("SELECT cpf_cliente FROM emprestimo WHERE id_livro = ?", (id_livro,))
+            cpfs_tuplas = self.cursor.fetchall()
+            
+            if not cpfs_tuplas:
+                return []
+            
+            return [self.recuperar_cliente(cpf[0]) for cpf in cpfs_tuplas if self.recuperar_cliente(cpf[0])]
+
+        except sqlite3.Error as e:
+            print(f"Erro ao consultar clientes por livro: {e}")
+            return []
+
+    def consultar_clientes_com_multas(self) -> List[Cliente]:
+        """ADICIONADO: Novo método para listar clientes com multas pendentes."""
+        try:
+            self.cursor.execute("SELECT DISTINCT cpf_cliente FROM emprestimo WHERE multa > 0")
+            cpfs_tuplas = self.cursor.fetchall()
+
+            if not cpfs_tuplas:
+                return []
+
+            return [self.recuperar_cliente(cpf[0]) for cpf in cpfs_tuplas if self.recuperar_cliente(cpf[0])]
+
+        except sqlite3.Error as e:
+            print(f"Erro ao consultar clientes com multas: {e}")
             return []
 
     def fechar_conexao(self):

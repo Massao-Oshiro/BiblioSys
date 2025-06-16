@@ -13,75 +13,41 @@ class GerenciadorSistema:
         self.relatorios = RelatoriosExcel()
         self.cadastrar_todos_os_bibliotecarios()
 
-    # Dentro da classe GerenciadorSistema, no arquivo GerenciadorSistema.py
-
     def cadastrar_todos_os_bibliotecarios(self):
+        #cadastra todos os bibliotecarios recuperados do arquivo bibliotecarios.txt no sistema
         try:
-            with open('bibliotecarios.txt', 'r', encoding='utf-8') as arquivo_bibliotecarios:
-                # NÃO HÁ 'next(arquivo_bibliotecarios)' AQUI, POIS SEU NOVO ARQUIVO NÃO TEM CABEÇALHO
-
-                for linha_do_arquivo in arquivo_bibliotecarios:
-                    linha_limpa = linha_do_arquivo.strip() # Limpa a linha inteira
-
-                    if not linha_limpa: # Pula linhas em branco
-                        continue
-                        
-                    informacoes_bibliotecario = linha_limpa.split(',')
-                    
-                    if len(informacoes_bibliotecario) == 2: 
-                        nome_bibliotecario = informacoes_bibliotecario[0].strip()
-                        # ESSENCIAL: Limpa o ID para remover espaços/quebras de linha
-                        id_do_bibliotecario = informacoes_bibliotecario[1].strip() 
-
-                        # print(f"DEBUG: Processando para cadastro - Nome='{nome_bibliotecario}', ID='{id_do_bibliotecario}'") # Descomente para depurar
-
-                        bibliotecario_recuperado = Bibliotecario(nome=nome_bibliotecario, id_bibliotecario=id_do_bibliotecario) 
-                        self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=bibliotecario_recuperado)
-                    else:
-                        print(f"AVISO: Linha ignorada em bibliotecarios.txt (formato inválido?): '{linha_limpa}'")
+            #abre o arquivo txt
+            with open('bibliotecarios.txt') as bibliotecarios:
+                #pega as informações dos bibliotecários a partir de linhas
+                for bibliotecario in bibliotecarios:
+                    informacoes_bibliotecario = bibliotecario.split(',') #separada as informações recuperadas a partir de virgula e guarda em um array
+                    bibliotecario_recuperado = Bibliotecario(nome=informacoes_bibliotecario[0], id_bibliotecario=informacoes_bibliotecario[1]) #recupera um objeto bibliotecario a partir das informações recuperadas
+                    self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=bibliotecario_recuperado) #cadastra o bibliotecario no banco de dados
         except FileNotFoundError:
-            print("ARQUIVO CRÍTICO 'bibliotecarios.txt' não encontrado.")
+            print("arquivo 'bibliotecarios.txt' não encontrado.")
         except Exception as e:
-            print(f"ERRO ao processar 'bibliotecarios.txt' ou cadastrar bibliotecários: {type(e).__name__} - {e}")
+            print(f"erro ao cadastrar os funcionarios: {e}")
 
     def cadastrar_livro(self, titulo : str, autor : str, id_livro : str):
         livro = Livro(titulo=titulo, autor=autor, id_livro=id_livro)
         self.gerenciador_banco_dados.cadastrar_livro(livro=livro)
     
-    def cadastrar_emprestimo(self, cpf_cliente : str, id_livro : str):
-        self.gerenciador_banco_dados.cadastrar_emprestimo(cpf_cliente=cpf_cliente, id_livro=id_livro)
-    
     def cadastrar_cliente(self, nome : str, cpf : str):
         cliente = Cliente(nome=nome, cpf=cpf)
         self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=cliente)
 
-    def registrar_emprestimo_usuario(self, cpf : str, id_livro : str) -> int:
-        #registra o emprestimo de um livro de um usuario a partir do cpf e do id do livro fornecidos
-        try:
-            livro_recuperado = self.gerenciador_banco_dados.recuperar_livro_por_id(id_livro=id_livro)
-            cliente = self.gerenciador_banco_dados.recuperar_cliente(cpf=cpf)
-            #verifica se o livro ou se o cliente estão cadastrados no banco de dados
-            if not livro_recuperado or not cliente:
-                return 1
-            
-            #verifica se o livro já está alugado
-            if livro_recuperado.get_status() == True:
-                print(f'livro {livro_recuperado.get_titulo()} indisponível para empréstimo')
-                return 2
-            
-            #verifica se o cliente já possui algum livro emprestado
-            emprestimo_recuperado = self.gerenciador_banco_dados.recuperar_emprestimo(cpf=cpf)
-            if emprestimo_recuperado:
-                print("usuario deve devolver livro emprestado antes de emprestar outro")
-                return 3
-            
-            self.gerenciador_banco_dados.cadastrar_emprestimo(cpf_cliente=cpf, id_livro=id_livro)
-            return 4
+    def registrar_emprestimo_usuario(self, cpf: str, id_livro: str):
+        data_hoje = datetime.now().date()
+        prazo = data_hoje + timedelta(days=15)
+        return self.gerenciador_banco_dados.registrar_emprestimo_simples(
+            cpf_cliente=cpf,
+            id_livro=id_livro,
+            data_emprestimo=data_hoje.isoformat(),
+            prazo=prazo.isoformat()
+        )
 
-        except Exception as e:
-            print(f'erro ao registrar emprestimo: {e}')
-            return 0
-    
+
+
     def registrar_devolucao_emprestimo_usuario(self, cpf : int):
         #registra a devolução do empréstimo de um livro a partir do cpf
         self.gerenciador_banco_dados.registrar_devolucao_emprestimo_usuario(cpf=cpf)
@@ -105,6 +71,9 @@ class GerenciadorSistema:
     def consultar_livro_autor(self, autor : str) -> List[Livro]:
         return self.gerenciador_banco_dados.consultar_livros_por_autor(autor=autor)
     
+    def consultar_clientes_por_nome(self, nome: str) -> List[Cliente]:
+        return self.gerenciador_banco_dados.recuperar_cliente_por_nome(nome=nome)
+    
     def gerar_relatorio_acervo(self):
         self.relatorios.gerar_relatorio_acervo()
     
@@ -126,5 +95,17 @@ class GerenciadorSistema:
             return False
         
         return True
+    
+    def consultar_clientes_por_nome(self, nome: str) -> List[Cliente]:
+        """ADICIONADO: Repassa a chamada para o GerenciadorBancoDados."""
+        return self.gerenciador_banco_dados.consultar_clientes_por_nome(nome=nome)
+        
+    def consultar_clientes_por_livro_emprestado(self, id_livro: str) -> List[Cliente]:
+        """ADICIONADO: Repassa a chamada para o GerenciadorBancoDados."""
+        return self.gerenciador_banco_dados.consultar_clientes_por_livro_emprestado(id_livro=id_livro)
+
+    def consultar_clientes_com_multas(self) -> List[Cliente]:
+        """ADICIONADO: Repassa a chamada para o GerenciadorBancoDados."""
+        return self.gerenciador_banco_dados.consultar_clientes_com_multas()
 
 gerenciador = GerenciadorSistema()
