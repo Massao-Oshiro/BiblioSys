@@ -55,35 +55,32 @@ class GerenciadorSistema:
         cliente = Cliente(nome=nome, cpf=cpf)
         self.gerenciador_banco_dados.cadastrar_pessoa(pessoa=cliente)
 
-    def registrar_emprestimo_usuario(self, cpf : str, id_livro : str):
+    def registrar_emprestimo_usuario(self, cpf : str, id_livro : str) -> int:
         #registra o emprestimo de um livro de um usuario a partir do cpf e do id do livro fornecidos
         try:
             livro_recuperado = self.gerenciador_banco_dados.recuperar_livro_por_id(id_livro=id_livro)
             cliente = self.gerenciador_banco_dados.recuperar_cliente(cpf=cpf)
             #verifica se o livro ou se o cliente estão cadastrados no banco de dados
             if not livro_recuperado or not cliente:
-                return
+                return 1
             
             #verifica se o livro já está alugado
             if livro_recuperado.get_status() == True:
                 print(f'livro {livro_recuperado.get_titulo()} indisponível para empréstimo')
-                return
+                return 2
             
             #verifica se o cliente já possui algum livro emprestado
             emprestimo_recuperado = self.gerenciador_banco_dados.recuperar_emprestimo(cpf=cpf)
             if emprestimo_recuperado:
                 print("usuario deve devolver livro emprestado antes de emprestar outro")
-                return
-            
-            #verifica se o cliente possui multa no nome a pagar
-            if emprestimo_recuperado.get_multa() > 0:
-                print("usuario possui multa a pagar")
-                return
+                return 3
             
             self.gerenciador_banco_dados.cadastrar_emprestimo(cpf_cliente=cpf, id_livro=id_livro)
+            return 4
 
         except Exception as e:
-            print(f'erro ao registrar emprestimo')
+            print(f'erro ao registrar emprestimo: {e}')
+            return 0
     
     def registrar_devolucao_emprestimo_usuario(self, cpf : int):
         #registra a devolução do empréstimo de um livro a partir do cpf

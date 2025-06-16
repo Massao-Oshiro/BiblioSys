@@ -433,10 +433,16 @@ class TelaPrincipal(ctk.CTk):
                  return
 
             # Se todas as verificações passaram, registrar o empréstimo
-            self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro)
-            self.label_feedback_emprestimo.configure(text="Empréstimo efetuado!", text_color="green")
-            self.entry_cpf_emprestimo.delete(0, 'end')
-            self.entry_idlivro_emprestimo.delete(0, 'end')
+            if self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 4:
+                self.label_feedback_emprestimo.configure(text="Empréstimo efetuado!", text_color="green")
+                self.entry_cpf_emprestimo.delete(0, 'end')
+                self.entry_idlivro_emprestimo.delete(0, 'end')
+            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 3:
+                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro indisponível.", text_color="orange")
+            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 2:
+                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro indisponível.", text_color="orange")            
+            elif self.gerenciador_sistema.registrar_emprestimo_usuario(cpf=cpf, id_livro=id_livro) == 1:
+                self.label_feedback_emprestimo.configure(text="Empréstimo negado! Livro ou cliente não cadastrados.", text_color="red")
 
         except Exception as e:
             self.label_feedback_emprestimo.configure(text="Erro ao registrar empréstimo. Verifique o console.", text_color="red")
