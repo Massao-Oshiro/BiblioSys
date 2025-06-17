@@ -3,7 +3,7 @@ from Pessoa import Pessoa
 from Livro import Livro
 from Cliente import Cliente
 from Emprestimo import Emprestimo
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import List
 import sqlite3
 
@@ -23,36 +23,26 @@ class GerenciadorBancoDados:
             #cadastra a tabela de livros
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS livro(
-                    titulo VARCHAR(100),
-                    autor VARCHAR(60),
-                    status INTEGER,
-                    id_livro VARCHAR(10) PRIMARY KEY,
-                    FOREIGN KEY (autor) REFERENCES autor(nome)
-                )
-            ''')
+                    titulo VARCHAR(100), autor VARCHAR(60), status INTEGER,
+                    id_livro VARCHAR(20) PRIMARY KEY)''')
 
             #cadastra a tabela de clientes
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS cliente(
-                    nome VARCHAR(60) NOT NULL,
-                    cpf VARCHAR(11) PRIMARY KEY,
-                    email VARCHAR(50)
-                )
-            ''')
+                    nome VARCHAR(60) NOT NULL, cpf VARCHAR(11) PRIMARY KEY, email VARCHAR(50))''')
 
             #cadastra a tabela de bibliotecarios
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS bibliotecario(
-                    nome VARCHAR(60) NOT NULL,
-                    id_bibliotecario VARCHAR(5) PRIMARY KEY
-                )
-            ''')
+                    nome VARCHAR(60) NOT NULL, id_bibliotecario VARCHAR(50) PRIMARY KEY)''')
 
+            #cadastra a tabela de emprestimos (COM A COLUNA FALTANTE)
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS emprestimo(
                     id_emprestimo INTEGER PRIMARY KEY AUTOINCREMENT,
                     cpf_cliente VARCHAR(11) NOT NULL,
-                    id_livro VARCHAR(10) NOT NULL,
+                    id_livro VARCHAR(20) NOT NULL,
+                    data_emprestimo TEXT NOT NULL, -- <--- COLUNA ADICIONADA AQUI
                     prazo TEXT NOT NULL,
                     multa FLOAT NOT NULL,
                     FOREIGN KEY (cpf_cliente) REFERENCES cliente(cpf),
@@ -60,18 +50,16 @@ class GerenciadorBancoDados:
                 )
             ''')
 
+            #cadastra a tabela de autor
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS autor(
-                    id_autor INTEGER PRIMARY KEY AUTOINCREMENT,
-                    nome VARCHAR(60) NOT NULL UNIQUE
-                )
-            ''')
+                    id_autor INTEGER PRIMARY KEY AUTOINCREMENT, nome VARCHAR(60) NOT NULL UNIQUE)''')
 
             self.conn.commit()
 
         except sqlite3.Error as e:
             print(f'Erro ao criar tabelas no banco de dados: {e}')
-    
+
     def recuperar_livro_por_id(self, id_livro : str) -> Livro:
         #busca e retorna o livro do banco de dados a partir do id fornecido
         try:
@@ -225,8 +213,9 @@ class GerenciadorBancoDados:
 
             self.cursor.execute('''
                 INSERT INTO emprestimo (cpf_cliente, id_livro, data_emprestimo, prazo, multa)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (cpf_cliente, id_livro, data_emprestimo.isoformat(), prazo.isoformat(), 0.0))
+        VALUES (?, ?, ?, ?, ?)
+''', (cpf_cliente, id_livro, data_emprestimo.isoformat(), prazo.isoformat(), 0.0))
+
 
             print(f"DEBUG (BD): Executando 'UPDATE livro SET status = 1 WHERE id_livro = {id_livro}'")
             self.cursor.execute('''
@@ -290,34 +279,37 @@ class GerenciadorBancoDados:
         except sqlite3.Error as e:
             print(f'erro ao cadastrar pessoa no banco de dados {e}')
 
-    def registrar_devolucao_emprestimo_usuario(self, cpf: str):
-        try:
-            emprestimo = self.recuperar_emprestimo(cpf=cpf)
-            if not emprestimo:
-                print("Cliente não possui empréstimos ativos.")
-                return False
+    def registrar_devolucao_emprestimo_usuario(self, cpf : str):
+        #registra a devolução do empréstimo de um livro a partir do cpf
+        try:            
+            emprestimo_recuperado = self.recuperar_emprestimo(cpf=cpf)
 
-            self.calcular_multa(cpf=cpf)
-            emprestimo_atualizado = self.recuperar_emprestimo(cpf=cpf)
+            if not emprestimo_recuperado:
+                print("cliente nao possui nenhum livro alugado")
+                return
+        
+            if emprestimo_recuperado.get_prazo():
+                self.calcular_multa(cpf=cpf)
+                if emprestimo_recuperado.get_multa() > 0:
+                    print("usuario deve pagar multa antes de fazer a devolucao")
+                    return
             
-            if emprestimo_atualizado and emprestimo_atualizado.get_multa() > 0:
-                print(f"Devolução não permitida: multa de R$ {emprestimo_atualizado.get_multa():.2f} pendente.")
-                return False
-            
-            id_livro_devolvido = emprestimo.get_id_livro()
-            
-            # Deleta o registro de empréstimo
-            self.cursor.execute("DELETE FROM emprestimo WHERE cpf_cliente = ?", (cpf,))
-            
-            # ALTERAÇÃO: Atualiza o status do livro para 0 (Disponível)
-            self.cursor.execute("UPDATE livro SET status = 0 WHERE id_livro = ?", (id_livro_devolvido,))
-            
+            livro_recuperado = self.recuperar_livro_por_id(id_livro=emprestimo_recuperado.get_id_livro())
+            livro_recuperado.set_status(status=False)
+
+            self.cursor.execute('''
+                DELETE FROM emprestimo WHERE cpf_cliente = ?
+            ''', (cpf,))
+
+            self.cursor.execute('''
+                UPDATE livro SET status = ? WHERE id_livro = ?
+            ''', (1 if livro_recuperado.get_status() else 0, livro_recuperado.get_id_livro()))
             self.conn.commit()
-            print("Devolução feita com sucesso e status do livro atualizado para 'Disponível'.")
-            return True
+            print("devolucao feita com sucesso")
+
         except sqlite3.Error as e:
-            print(f"Erro ao registrar devolução: {e}")
-            return False
+            print("erro ao registrar devolucao de emprestimo {e}")
+        
 
     def calcular_multa(self, cpf : str):
         #calcula o valor da multa de um usuário a partir do cpf de um usuário
@@ -530,40 +522,34 @@ class GerenciadorBancoDados:
         except Exception as e:
             print(f"[ERRO BD] Falha ao atualizar status do livro: {e}")
 
-    def registrar_emprestimo_simples(self, cpf_cliente, id_livro, data_emprestimo, prazo):
+    def consultar_clientes_por_nome(self, nome: str) -> list:
         try:
-            self.cursor.execute('''
-                INSERT INTO emprestimo (cpf_cliente, id_livro, data_emprestimo, prazo, multa)
-                VALUES (?, ?, ?, ?, 0.00)
-            ''', (cpf_cliente, id_livro, data_emprestimo, prazo))
-            self.cursor.execute('''
-                UPDATE livro SET status = 1 WHERE id_livro = ?
-            ''', (id_livro,))
-            self.conn.commit()
-            print("[BD] Empréstimo registrado e livro marcado como emprestado.")
-            return True
-        except sqlite3.Error as e:
-            print(f"[ERRO BD] Falha ao registrar empréstimo: {e}")
-            return False
-   
-    def consultar_clientes_por_nome(self, nome: str) -> List[Cliente]:
-        """ADICIONADO: Novo método para buscar clientes por parte do nome."""
-        try:
-            # O operador '%' é um coringa que permite buscar por partes do nome
-            termo_busca = '%' + nome.lower() + '%'
-            self.cursor.execute("SELECT cpf FROM cliente WHERE lower(nome) LIKE ?", (termo_busca,))
-            cpfs_tuplas = self.cursor.fetchall()
+            termo_busca = '%' + nome + '%'
+            print(f"DEBUG (BD): Executando SQL: SELECT ... WHERE nome LIKE '{termo_busca}'")
             
-            if not cpfs_tuplas:
+            self.cursor.execute('''
+                SELECT nome, cpf, email FROM cliente WHERE nome LIKE ?
+            ''', (termo_busca,))
+            
+            clientes_recuperados_tuplas = self.cursor.fetchall()
+            print(f"DEBUG (BD): Query de busca por nome retornou: {clientes_recuperados_tuplas}")
+            
+            if not clientes_recuperados_tuplas:
                 return []
             
-            # Reutiliza o método recuperar_cliente para montar a lista de objetos
-            return [self.recuperar_cliente(cpf[0]) for cpf in cpfs_tuplas if self.recuperar_cliente(cpf[0])]
+            from Cliente import Cliente # Importação local para evitar importação circular se necessário
+            lista_clientes = []
+            for tupla in clientes_recuperados_tuplas:
+                cliente = Cliente(nome=tupla[0], cpf=tupla[1])
+                cliente.set_email(email=tupla[2])
+                lista_clientes.append(cliente)
+                
+            return lista_clientes
             
         except sqlite3.Error as e:
             print(f"Erro ao consultar clientes por nome: {e}")
             return []
-
+           
     def consultar_clientes_por_livro_emprestado(self, id_livro: str) -> List[Cliente]:
         """ADICIONADO: Novo método para buscar cliente por livro emprestado."""
         try:
@@ -579,20 +565,6 @@ class GerenciadorBancoDados:
             print(f"Erro ao consultar clientes por livro: {e}")
             return []
 
-    def consultar_clientes_com_multas(self) -> List[Cliente]:
-        """ADICIONADO: Novo método para listar clientes com multas pendentes."""
-        try:
-            self.cursor.execute("SELECT DISTINCT cpf_cliente FROM emprestimo WHERE multa > 0")
-            cpfs_tuplas = self.cursor.fetchall()
-
-            if not cpfs_tuplas:
-                return []
-
-            return [self.recuperar_cliente(cpf[0]) for cpf in cpfs_tuplas if self.recuperar_cliente(cpf[0])]
-
-        except sqlite3.Error as e:
-            print(f"Erro ao consultar clientes com multas: {e}")
-            return []
 
     def fechar_conexao(self):
         self.conn.close()
